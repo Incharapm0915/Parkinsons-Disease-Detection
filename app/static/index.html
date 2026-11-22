@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoiceScreen · Parkinson's voice analysis</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b5bdb'/%3E%3Cpath d='M5 16h3l2-6 4 12 4-16 3 10h6' stroke='white' stroke-width='2.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg:#f3f5fc; --card:rgba(255,255,255,.78); --solid:#ffffff; --ink:#141b2e; --mute:#5b6882; --line:rgba(120,135,175,.22); --soft:rgba(110,125,175,.11);
+    --a1:#4f6bff; --a2:#9a5cff; --accent:#4f6bff; --accent-ink:#ffffff;
+    --ok:#0f9d6e; --mid:#d98a0b; --hi:#e0412f; --viz:#0c1120;
+    --shadow:0 1px 2px rgba(20,27,46,.05), 0 12px 32px rgba(40,55,110,.10);
+    --blob1:rgba(110,130,255,.35); --blob2:rgba(190,120,255,.28); --blob3:rgba(70,200,170,.22);
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg:#0a0e18; --card:rgba(21,28,44,.72); --solid:#161e30; --ink:#eaf0fa; --mute:#9aa8c0; --line:rgba(150,170,220,.16); --soft:rgba(140,160,220,.10);
+    --a1:#7b93ff; --a2:#b184ff; --accent:#7b93ff; --accent-ink:#0a0e18;
+    --ok:#3fd6a0; --mid:#f5c262; --hi:#ff7f6f; --viz:#070a12;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 36px rgba(0,0,0,.35);
+    --blob1:rgba(90,110,255,.28); --blob2:rgba(160,100,255,.22); --blob3:rgba(40,190,150,.14);
+  } }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--ink); min-height:100vh; position:relative; overflow-x:hidden;
+         font:16px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari","Noto Sans Kannada",sans-serif; }
+  body::before { content:""; position:fixed; inset:-20%; z-index:-1; pointer-events:none; filter:blur(60px);
+    background:radial-gradient(40% 35% at 15% 12%, var(--blob1), transparent 70%), radial-gradient(35% 35% at 88% 18%, var(--blob2), transparent 70%), radial-gradient(40% 40% at 70% 92%, var(--blob3), transparent 70%);
+    animation:drift 22s ease-in-out infinite alternate; }
+  @keyframes drift { to { transform:translate3d(2%,3%,0) scale(1.06); } }
+  .wrap { max-width:1120px; margin:0 auto; padding:18px 16px 56px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 0 10px; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  .logo { width:42px; height:42px; border-radius:13px; background:linear-gradient(135deg,var(--a1),var(--a2)); display:grid; place-items:center; flex:none; box-shadow:0 6px 18px color-mix(in srgb, var(--a1) 45%, transparent); }
+  .logo svg { width:24px; height:24px; stroke:#fff; }
+  .brand h1 { font-size:1.15rem; margin:0; line-height:1.2; letter-spacing:-.01em; }
+  .brand p { margin:0; color:var(--mute); font-size:.82rem; }
+  select { font:inherit; font-size:.9rem; color:var(--ink); background:var(--card); backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:12px; padding:8px 10px; }
+  :focus-visible { outline:3px solid color-mix(in srgb, var(--a1) 55%, transparent); outline-offset:2px; }
+
+  /* hero */
+  .hero { text-align:center; padding:26px 8px 30px; }
+  .eyebrow { display:inline-block; padding:5px 14px; border-radius:999px; font-size:.75rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--a1); background:color-mix(in srgb, var(--a1) 12%, transparent); border:1px solid color-mix(in srgb, var(--a1) 25%, transparent); }
+  .hero h2 { font-size:clamp(1.9rem,5vw,3.1rem); line-height:1.1; letter-spacing:-.03em; margin:16px auto 10px; max-width:16em; font-weight:800; }
+  .grad { background:linear-gradient(100deg,var(--a1),var(--a2) 60%,#ff6fae); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p { color:var(--mute); max-width:36em; margin:0 auto; font-size:1.02rem; }
+  .pills { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:20px; }
+  .pills > span { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; background:var(--card); backdrop-filter:blur(10px); border:1px solid var(--line); font-size:.85rem; font-weight:600; box-shadow:var(--shadow); }
+  .pills i { width:8px; height:8px; border-radius:50%; background:linear-gradient(135deg,var(--a1),var(--a2)); }
+
+  .grid { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,6fr); gap:18px; align-items:start; }
+  @media (max-width:860px) { .grid { grid-template-columns:minmax(0,1fr); } }
+  .col { display:grid; gap:18px; grid-template-columns:minmax(0,1fr); min-width:0; }
+  .card { background:var(--card); backdrop-filter:blur(16px) saturate(1.3); -webkit-backdrop-filter:blur(16px) saturate(1.3); border:1px solid var(--line); border-radius:22px; padding:22px; box-shadow:var(--shadow); transition:transform .25s, box-shadow .3s, border-color .3s; }
+  .card:hover { transform:translateY(-2px); }
+  .card h2 { display:flex; align-items:center; gap:10px; font-size:.76rem; text-transform:uppercase; letter-spacing:.09em; color:var(--mute); margin:0 0 14px; font-weight:700; }
+  .card h2::before { content:""; width:18px; height:4px; border-radius:2px; background:linear-gradient(90deg,var(--a1),var(--a2)); }
+  .center { text-align:center; } .center h2 { justify-content:center; }
+  .card.live { border-color:var(--a1); box-shadow:0 0 0 1px var(--a1), 0 0 38px color-mix(in srgb, var(--a1) 38%, transparent); }
+
+  /* gauge */
+  .gauge { position:relative; width:min(100%,340px); margin:6px auto 0; }
+  .gauge svg { width:100%; display:block; overflow:visible; }
+  .gauge .track { stroke:url(#gTrack); opacity:.3; }
+  #arc { transition:stroke-dashoffset .7s cubic-bezier(.2,.8,.2,1), stroke .4s; stroke:var(--mute); filter:drop-shadow(0 0 6px color-mix(in srgb, currentColor 55%, transparent)); }
+  .gauge .tick { stroke:var(--mute); stroke-width:1.4; opacity:.55; stroke-linecap:round; }
+  #knobg { transform-origin:100px 100px; transition:transform .7s cubic-bezier(.2,.8,.2,1), opacity .3s; opacity:0; }
+  #knob { fill:var(--solid); stroke:currentColor; stroke-width:3.4; filter:drop-shadow(0 2px 4px rgba(0,0,0,.3)); }
+  .gauge .read { position:absolute; left:0; right:0; bottom:2%; text-align:center; }
+  #score { font-size:3.5rem; font-weight:800; letter-spacing:-.04em; line-height:1; font-variant-numeric:tabular-nums; }
+  .zones { display:flex; justify-content:space-between; color:var(--mute); font-size:.74rem; font-weight:600; width:min(100%,340px); margin:8px auto 0; padding:0 3%; }
+  .chip { display:inline-flex; align-items:center; gap:9px; padding:8px 18px; border-radius:999px; font-weight:700; font-size:.95rem; background:var(--soft); color:var(--mute); margin-top:16px; transition:background .3s,color .3s; max-width:100%; }
+  .chip i { width:10px; height:10px; border-radius:50%; background:currentColor; flex:none; box-shadow:0 0 0 4px color-mix(in srgb, currentColor 22%, transparent); }
+  .chip.low { background:color-mix(in srgb, var(--ok) 15%, transparent); color:var(--ok); }
+  .chip.mid { background:color-mix(in srgb, var(--mid) 17%, transparent); color:var(--mid); }
+  .chip.high { background:color-mix(in srgb, var(--hi) 15%, transparent); color:var(--hi); }
+
+  .controls { display:flex; align-items:center; justify-content:center; gap:16px; margin-top:20px; flex-wrap:wrap; }
+  button { font:inherit; cursor:pointer; }
+  .btn { position:relative; border:0; border-radius:16px; padding:15px 30px; font-weight:700; font-size:1.02rem; color:#fff; display:inline-flex; align-items:center; gap:11px;
+         background:linear-gradient(135deg,var(--a1),var(--a2)); box-shadow:0 10px 26px color-mix(in srgb, var(--a1) 45%, transparent); transition:transform .12s, filter .2s, box-shadow .2s; }
+  .btn:hover { filter:brightness(1.08); box-shadow:0 14px 32px color-mix(in srgb, var(--a1) 55%, transparent); } .btn:active { transform:scale(.97); }
+  .btn svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .btn.stop { background:linear-gradient(135deg,#ff6a5c,var(--hi)); box-shadow:0 10px 26px color-mix(in srgb, var(--hi) 45%, transparent); }
+  .btn.rec::before, .btn.rec::after { content:""; position:absolute; inset:0; border-radius:inherit; border:2px solid var(--hi); animation:ring 1.8s ease-out infinite; pointer-events:none; }
+  .btn.rec::after { animation-delay:.9s; }
+  @keyframes ring { from { transform:scale(1); opacity:.7; } to { transform:scale(1.35,1.7); opacity:0; } }
+  .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); padding:10px 16px; font-weight:600; font-size:.92rem; box-shadow:none; border-radius:12px; }
+  .btn.ghost:hover { background:var(--soft); box-shadow:none; filter:none; }
+  #time { font-variant-numeric:tabular-nums; color:var(--mute); font-weight:700; min-width:3.2em; font-size:1.05rem; }
+  .upload { display:flex; justify-content:center; align-items:center; gap:10px; margin-top:16px; color:var(--mute); font-size:.9rem; flex-wrap:wrap; }
+  .small { color:var(--mute); font-size:.78rem; text-align:center; margin:8px 0 0; }
+  .card.drag { border-color:var(--a1); outline:2px dashed var(--a1); outline-offset:-8px; }
+  button[disabled] { opacity:.55; cursor:default; }
+  .progress { height:6px; background:var(--soft); border-radius:3px; overflow:hidden; margin-top:18px; }
+  .progress > div { height:100%; width:0; background:linear-gradient(90deg,var(--a1),var(--a2)); border-radius:3px; transition:width .5s linear; }
+  .status { min-height:1.6em; text-align:center; color:var(--mute); font-size:.92rem; margin:12px 0 0; }
+  .status .lv { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--line); margin-right:8px; vertical-align:middle; }
+
+  /* steps + prompt */
+  .steps { list-style:none; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:0 0 16px; padding:0; }
+  .steps li { display:flex; align-items:center; gap:10px; font-size:.8rem; font-weight:600; color:var(--mute); line-height:1.25; }
+  .steps b { flex:none; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:.82rem; background:linear-gradient(135deg,var(--a1),var(--a2)); }
+  @media (max-width:520px) { .steps { grid-template-columns:1fr; } }
+  .tabs { display:flex; gap:6px; background:var(--soft); padding:4px; border-radius:13px; width:max-content; max-width:100%; margin:0 auto 14px; }
+  .tabs button { border:0; background:transparent; color:var(--mute); padding:8px 16px; border-radius:10px; font-weight:650; font-size:.9rem; }
+  .tabs button[aria-selected="true"] { background:var(--solid); color:var(--ink); box-shadow:0 2px 8px rgba(0,0,0,.14); }
+  .prompt { background:linear-gradient(135deg, color-mix(in srgb, var(--a1) 9%, transparent), color-mix(in srgb, var(--a2) 9%, transparent)); border:1px solid var(--line); border-radius:16px; padding:16px 18px; color:var(--ink); text-align:center; font-size:.98rem; }
+  .prompt b.big { display:block; font-size:2rem; font-weight:800; letter-spacing:.22em; margin:4px 0; background:linear-gradient(90deg,var(--a1),var(--a2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+  canvas { width:100%; display:block; border-radius:14px; background:var(--viz); }
+  #spec { height:140px; }
+  .cap { color:var(--mute); font-size:.8rem; margin:10px 0 0; display:flex; justify-content:space-between; }
+
+  #chart { width:100%; height:130px; display:block; border-radius:12px; background:var(--soft); }
+  #chart .band { fill:none; stroke:var(--mute); opacity:.35; stroke-dasharray:3 4; vector-effect:non-scaling-stroke; }
+  #chart .line { fill:none; stroke:var(--a1); stroke-width:2.6; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+  #chart .area { fill:url(#ag); }
+
+  .row { display:grid; grid-template-columns:108px 1fr 46px; align-items:center; gap:12px; margin:11px 0; font-size:.9rem; }
+  .row .nm { display:flex; flex-direction:column; line-height:1.2; font-weight:650; }
+  .row .nm small { color:var(--mute); font-size:.7rem; font-weight:500; }
+  .bar { height:10px; background:var(--soft); border-radius:6px; overflow:hidden; }
+  .bar > span { display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--a1),var(--a2)); transition:width .6s cubic-bezier(.2,.8,.2,1); }
+  .row.cmp .bar > span { background:var(--mute); opacity:.45; }
+  .row .v { text-align:right; font-variant-numeric:tabular-nums; font-weight:750; }
+
+  .feat { display:grid; grid-template-columns:1fr auto; gap:3px 12px; padding:11px 0; border-top:1px solid var(--line); font-size:.9rem; }
+  .feat:first-child { border-top:0; padding-top:0; }
+  .feat .fn { font-weight:650; } .feat .fv { color:var(--mute); font-variant-numeric:tabular-nums; }
+  .tag { grid-column:1 / -1; display:flex; align-items:center; gap:10px; color:var(--mute); font-size:.8rem; }
+  .tag .mini { flex:1; height:6px; background:var(--soft); border-radius:3px; overflow:hidden; max-width:170px; }
+  .tag .mini span { display:block; height:100%; border-radius:3px; }
+  .tag.pd .mini span { background:linear-gradient(90deg,#ffa48f,var(--hi)); } .tag.hc .mini span { background:linear-gradient(90deg,#8de6c3,var(--ok)); }
+
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .stat { background:var(--soft); border-radius:16px; padding:14px 8px; text-align:center; }
+  .stat b { display:block; font-size:1.55rem; font-weight:800; font-variant-numeric:tabular-nums; background:linear-gradient(90deg,var(--a1),var(--a2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .stat span { color:var(--mute); font-size:.76rem; font-weight:600; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+
+  details { color:var(--mute); font-size:.9rem; }
+  details summary { cursor:pointer; color:var(--ink); font-weight:700; }
+  details ul { margin:12px 0 0; padding-left:20px; } details li { margin:6px 0; }
+  .disc { margin:26px 4px 0; color:var(--mute); font-size:.82rem; text-align:center; }
+  [hidden] { display:none !important; }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+  @media print { header select, .controls, .tabs, #liveCards, .actions, details, .hero, .upload, .small { display:none !important; } body { background:#fff; } body::before { display:none; } .card { box-shadow:none; backdrop-filter:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-5 4 12 4-14 3 7h4"/></svg></div>
+      <div><h1 data-i="title"></h1><p data-i="sub"></p></div>
+    </div>
+    <select id="lang" aria-label="Language"><option value="en">English</option><option value="hi">हिन्दी</option><option value="kn">ಕನ್ನಡ</option></select>
+  </header>
+
+  <section class="hero">
+    <span class="eyebrow" data-i="eyebrow"></span>
+    <h2><span data-i="hero_a"></span> <span class="grad" data-i="hero_b"></span></h2>
+    <p data-i="hero_p"></p>
+    <div class="pills"><span><i></i><span data-i="pill1"></span></span><span><i></i><span data-i="pill2"></span></span><span><i></i><span data-i="pill3"></span></span></div>
+  </section>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card center" id="testCard" aria-labelledby="h_test">
+        <h2 id="h_test" data-i="h_test"></h2>
+        <div class="gauge">
+          <svg viewBox="0 0 200 112" aria-hidden="true">
+            <defs>
+              <linearGradient id="gTrack" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0" style="stop-color:var(--ok)"/><stop offset=".5" style="stop-color:var(--mid)"/><stop offset="1" style="stop-color:var(--hi)"/>
+              </linearGradient>
+            </defs>
+            <path class="track" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke-width="16" stroke-linecap="round"/>
+            <path id="arc" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke-width="16" stroke-linecap="round" stroke-dasharray="251.33" stroke-dashoffset="251.33"/>
+            <line class="tick" x1="55.1" y1="11.8" x2="58.2" y2="18"/><line class="tick" x1="144.9" y1="11.8" x2="141.8" y2="18"/>
+            <g id="knobg"><circle id="knob" cx="20" cy="100" r="8.5"/></g>
+          </svg>
+          <div class="read"><div id="score" aria-live="polite">–</div></div>
+        </div>
+        <div class="zones"><span data-i="z_low"></span><span data-i="z_mid"></span><span data-i="z_high"></span></div>
+        <div class="chip" id="chip"><i></i><span id="verdict" data-i="idle"></span></div>
+
+        <div class="progress" aria-hidden="true"><div id="prog"></div></div>
+        <div class="controls">
+          <span id="time">0:00</span>
+          <button class="btn" id="go"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span id="golbl"></span></button>
+        </div>
+        <p class="status" id="status" aria-live="polite"><span class="lv" id="lv"></span><span id="stxt"></span></p>
+        <div class="upload">
+          <span data-i="or"></span>
+          <button class="btn ghost" id="up"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg><span data-i="upload"></span></button>
+          <input type="file" id="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.webm" hidden>
+        </div>
+        <p class="small" data-i="upload_hint"></p>
+      </section>
+
+      <section class="card" id="liveCards" aria-labelledby="h_how">
+        <h2 id="h_how" data-i="h_how"></h2>
+        <ol class="steps">
+          <li><b>1</b><span data-i="st1"></span></li><li><b>2</b><span data-i="st2"></span></li><li><b>3</b><span data-i="st3"></span></li>
+        </ol>
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tab_a" aria-selected="true" data-i="tab_a"></button>
+          <button role="tab" id="tab_b" aria-selected="false" data-i="tab_b"></button>
+        </div>
+        <div class="prompt" id="prompt"></div>
+        <p class="small" style="font-size:.85rem;margin-top:14px" data-i="tips"></p>
+      </section>
+
+      <section class="card" id="summary" hidden aria-labelledby="h_sum">
+        <h2 id="h_sum" data-i="h_sum"></h2>
+        <div class="stats">
+          <div class="stat"><b id="s_avg">–</b><span data-i="s_avg"></span></div>
+          <div class="stat"><b id="s_win">–</b><span data-i="s_win"></span></div>
+          <div class="stat"><b id="s_dur">–</b><span data-i="s_dur"></span></div>
+        </div>
+        <p id="s_text" style="margin:16px 0 0"></p>
+        <div class="actions">
+          <button class="btn ghost" id="dl" data-i="dl"></button>
+          <button class="btn ghost" id="pr" data-i="print"></button>
+        </div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card" id="specCard">
+        <h2 data-i="h_spec"></h2>
+        <canvas id="spec" width="640" height="140"></canvas>
+        <div class="cap"><span data-i="spec_cap"></span><span>0 – 8 kHz</span></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i="h_time"></h2>
+        <svg id="chart" viewBox="0 0 300 100" preserveAspectRatio="none" role="img" aria-label="Score over time">
+          <defs><linearGradient id="ag" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--a1);stop-opacity:.4"/><stop offset="1" style="stop-color:var(--a1);stop-opacity:0"/></linearGradient></defs>
+          <line class="band" x1="0" x2="300" y1="35" y2="35"/><line class="band" x1="0" x2="300" y1="65" y2="65"/>
+          <path class="area" id="area" d=""/><path class="line" id="line" d=""/>
+        </svg>
+        <div class="cap"><span data-i="t_start"></span><span data-i="t_now"></span></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i="h_models"></h2>
+        <div id="models"><p style="color:var(--mute);margin:0" data-i="empty"></p></div>
+        <p class="cap" style="display:block" data-i="models_note"></p>
+      </section>
+
+      <section class="card">
+        <h2 data-i="h_why"></h2>
+        <div id="why"><p style="color:var(--mute);margin:0" data-i="empty"></p></div>
+      </section>
+
+      <section class="card">
+        <details>
+          <summary data-i="h_about"></summary>
+          <ul>
+            <li data-i="a1"></li><li data-i="a2"></li><li data-i="a3"></li><li data-i="a4"></li>
+          </ul>
+        </details>
+      </section>
+    </div>
+  </div>
+  <p class="disc" data-i="disc"></p>
+</div>
+
+<script>
+const T = {
+  en: {
+    eyebrow:"AI voice biomarker screening", hero_a:"Listen to what your", hero_b:"voice reveals.",
+    hero_p:"Speak, or upload a short recording. Machine-learning models analyse pitch stability, loudness stability, voice clarity and spectral variation, live.",
+    pill1:"94% speaker-independent accuracy", pill2:"89 speakers · 2 corpora", pill3:"Real time · 3 s windows",
+    st1:"Record or upload audio", st2:"AI analyses 3-second windows", st3:"Review score and reasons",
+    title:"VoiceScreen", sub:"Parkinson's voice analysis · real time", h_test:"Voice test", idle:"Ready", z_low:"Low", z_mid:"Uncertain", z_high:"Higher",
+    start:"Start test", stop:"Stop", h_how:"How to record", tab_a:"Say “aaah”", tab_b:"Read aloud",
+    pA:"Take a breath, then hold the sound<b class='big'>aaaaah</b>as steady and long as you can. Repeat 2–3 times.",
+    pB:"Read this at your normal pace:<br><i>“The north wind and the sun were disputing which was the stronger, when a traveller came along wrapped in a warm cloak.”</i>",
+    tips:"Quiet room · mouth about 15 cm from the mic · aim for 10–15 seconds.",
+    or:"or", upload:"Upload audio file", upload_hint:"WAV, MP3, M4A or FLAC · speech or a sustained vowel · the first 90 seconds are analysed. You can also drop a file here.",
+    decoding:"Reading", analysing:"Analysing", decode_err:"Could not read this audio file. Try WAV or MP3.", nospeech:"No clear continuous speech found. Use a recording with at least 3 seconds of speech or a held “aaah” (pauses and silence are skipped).", tooshort:"File is too short – use at least 3 seconds.",
+    wait:"Collecting audio…", listen:"Listening – keep going", novoice:"No clear voice – speak louder or closer to the mic", mic:"Microphone access was denied. Allow it in the browser address bar.",
+    low:"Low likelihood", mid:"Uncertain", high:"Higher likelihood of Parkinson's-related voice changes",
+    h_spec:"Live spectrogram", spec_cap:"Your voice, frequency over time", h_time:"Score over time", t_start:"start", t_now:"now",
+    h_models:"Model scores", models_note:"Solid bars make up the score. Grey bars (CNN, LSTM) are shown for comparison only – they were less reliable on new speakers.",
+    in_score:"in score", cmp:"comparison", h_why:"What influenced this window", empty:"Start the test to see results.", pd:"closer to the PD group", hc:"closer to the healthy group",
+    h_sum:"Session summary", s_avg:"average score", s_win:"windows analysed", s_dur:"duration", dl:"Download report (JSON)", print:"Print",
+    sum_low:"Across this session the voice looked similar to healthy speakers in the training data.", sum_mid:"Across this session the result was inconclusive. Try again in a quiet room, or record for longer.",
+    sum_high:"Across this session the voice looked more like the Parkinson's group in the training data. This is not a diagnosis – please consult a neurologist.", sum_few:"Too little speech was captured for a reliable summary. Record at least 10 seconds.",
+    h_about:"About this model",
+    a1:"Your audio is cut into 3-second windows. For each, 71 voice measures are computed: jitter, shimmer, harmonics-to-noise ratio, pitch, formants and how much the spectrum varies.",
+    a2:"Four models (LDA, XGBoost, Random Forest, SVM) each give a probability. The score is their average, smoothed over the last four windows.",
+    a3:"Validated on 89 speakers from two public corpora (Italian and English): about 94% accuracy with speakers kept apart between training and testing.",
+    a4:"Limits: small training set, two languages, specific microphones. Accuracy on other microphones and languages is not proven.",
+    disc:"Screening aid only – not a medical diagnosis. Audio is processed on this computer and is not stored."
+  },
+  hi: {
+    eyebrow:"AI आवाज़ बायोमार्कर स्क्रीनिंग", hero_a:"जानिए आपकी", hero_b:"आवाज़ क्या बताती है।",
+    title:"VoiceScreen", sub:"पार्किंसंस आवाज़ विश्लेषण · रीयल टाइम", h_test:"आवाज़ परीक्षण", idle:"तैयार", z_low:"कम", z_mid:"अनिश्चित", z_high:"अधिक",
+    or:"या", upload:"ऑडियो फ़ाइल अपलोड करें", analysing:"विश्लेषण हो रहा है", decode_err:"यह ऑडियो फ़ाइल पढ़ी नहीं जा सकी।",
+    start:"परीक्षण शुरू करें", stop:"रोकें", h_how:"रिकॉर्ड कैसे करें", tab_a:"“आआआ” बोलें", tab_b:"पढ़कर सुनाएँ",
+    pA:"गहरी साँस लें, फिर जितना हो सके स्थिर और लंबा<b class='big'>आआआआ</b>बोलें। 2–3 बार दोहराएँ।",
+    tips:"शांत कमरा · माइक से लगभग 15 सेमी दूर · 10–15 सेकंड तक बोलें।",
+    wait:"ऑडियो इकट्ठा हो रहा है…", listen:"सुन रहा है – बोलते रहें", novoice:"स्पष्ट आवाज़ नहीं मिली – ज़ोर से या माइक के पास बोलें", mic:"माइक्रोफ़ोन की अनुमति नहीं मिली।",
+    low:"कम संभावना", mid:"अनिश्चित", high:"पार्किंसंस से जुड़े आवाज़ बदलावों की अधिक संभावना",
+    h_spec:"लाइव स्पेक्ट्रोग्राम", h_time:"समय के साथ स्कोर", t_start:"शुरू", t_now:"अभी", h_models:"मॉडल स्कोर", h_why:"इस विंडो में किसने असर डाला", empty:"नतीजे देखने के लिए परीक्षण शुरू करें।",
+    pd:"PD समूह के करीब", hc:"स्वस्थ समूह के करीब", h_sum:"सत्र सारांश", s_avg:"औसत स्कोर", s_win:"विंडो", s_dur:"अवधि", dl:"रिपोर्ट डाउनलोड करें", print:"प्रिंट",
+    h_about:"इस मॉडल के बारे में", disc:"यह केवल स्क्रीनिंग सहायता है, चिकित्सकीय निदान नहीं। ऑडियो इसी कंप्यूटर पर प्रोसेस होता है, सहेजा नहीं जाता।"
+  },
+  kn: {
+    eyebrow:"AI ಧ್ವನಿ ಬಯೋಮಾರ್ಕರ್ ಪರೀಕ್ಷೆ", hero_a:"ನಿಮ್ಮ ಧ್ವನಿ", hero_b:"ಏನು ಹೇಳುತ್ತದೆ ಕೇಳಿ.",
+    title:"VoiceScreen", sub:"ಪಾರ್ಕಿನ್ಸನ್ ಧ್ವನಿ ವಿಶ್ಲೇಷಣೆ · ರಿಯಲ್ ಟೈಮ್", h_test:"ಧ್ವನಿ ಪರೀಕ್ಷೆ", idle:"ಸಿದ್ಧ", z_low:"ಕಡಿಮೆ", z_mid:"ಅನಿಶ್ಚಿತ", z_high:"ಹೆಚ್ಚು",
+    or:"ಅಥವಾ", upload:"ಆಡಿಯೋ ಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ", analysing:"ವಿಶ್ಲೇಷಿಸಲಾಗುತ್ತಿದೆ", decode_err:"ಈ ಆಡಿಯೋ ಫೈಲ್ ಓದಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+    start:"ಪರೀಕ್ಷೆ ಪ್ರಾರಂಭಿಸಿ", stop:"ನಿಲ್ಲಿಸಿ", h_how:"ರೆಕಾರ್ಡ್ ಮಾಡುವುದು ಹೇಗೆ", tab_a:"“ಆಆಆ” ಹೇಳಿ", tab_b:"ಓದಿ ಹೇಳಿ",
+    pA:"ಆಳವಾಗಿ ಉಸಿರೆಳೆದು, ಸಾಧ್ಯವಾದಷ್ಟು ಸ್ಥಿರವಾಗಿ ಮತ್ತು ಉದ್ದವಾಗಿ<b class='big'>ಆಆಆಆ</b>ಎಂದು ಹೇಳಿ. 2–3 ಬಾರಿ ಪುನರಾವರ್ತಿಸಿ.",
+    tips:"ಶಾಂತ ಕೋಣೆ · ಮೈಕ್‌ನಿಂದ ಸುಮಾರು 15 ಸೆಂ.ಮೀ · 10–15 ಸೆಕೆಂಡ್ ಮಾತನಾಡಿ.",
+    wait:"ಆಡಿಯೋ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತಿದೆ…", listen:"ಆಲಿಸುತ್ತಿದೆ – ಮುಂದುವರಿಸಿ", novoice:"ಸ್ಪಷ್ಟ ಧ್ವನಿ ಸಿಗಲಿಲ್ಲ – ಜೋರಾಗಿ ಅಥವಾ ಮೈಕ್ ಹತ್ತಿರ ಮಾತನಾಡಿ", mic:"ಮೈಕ್ರೋಫೋನ್ ಅನುಮತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ.",
+    low:"ಕಡಿಮೆ ಸಾಧ್ಯತೆ", mid:"ಅನಿಶ್ಚಿತ", high:"ಪಾರ್ಕಿನ್ಸನ್‌ಗೆ ಸಂಬಂಧಿಸಿದ ಧ್ವನಿ ಬದಲಾವಣೆಯ ಹೆಚ್ಚಿನ ಸಾಧ್ಯತೆ",
+    h_spec:"ಲೈವ್ ಸ್ಪೆಕ್ಟ್ರೋಗ್ರಾಂ", h_time:"ಕಾಲಾನುಕ್ರಮದ ಸ್ಕೋರ್", t_start:"ಆರಂಭ", t_now:"ಈಗ", h_models:"ಮಾದರಿ ಸ್ಕೋರ್‌ಗಳು", h_why:"ಈ ವಿಂಡೋದ ಮೇಲೆ ಪ್ರಭಾವ ಬೀರಿದ್ದು", empty:"ಫಲಿತಾಂಶ ನೋಡಲು ಪರೀಕ್ಷೆ ಪ್ರಾರಂಭಿಸಿ.",
+    pd:"PD ಗುಂಪಿಗೆ ಹತ್ತಿರ", hc:"ಆರೋಗ್ಯವಂತ ಗುಂಪಿಗೆ ಹತ್ತಿರ", h_sum:"ಅವಧಿಯ ಸಾರಾಂಶ", s_avg:"ಸರಾಸರಿ ಸ್ಕೋರ್", s_win:"ವಿಂಡೋಗಳು", s_dur:"ಅವಧಿ", dl:"ವರದಿ ಡೌನ್‌ಲೋಡ್", print:"ಮುದ್ರಿಸಿ",
+    h_about:"ಈ ಮಾದರಿಯ ಬಗ್ಗೆ", disc:"ಇದು ಕೇವಲ ಪರೀಕ್ಷಾ ಸಹಾಯ, ವೈದ್ಯಕೀಯ ರೋಗನಿರ್ಣಯವಲ್ಲ. ಆಡಿಯೋ ಈ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲೇ ಪ್ರೊಸೆಸ್ ಆಗುತ್ತದೆ."
+  }
+};
+const $ = id => document.getElementById(id);
+const L = k => (T[lang] && T[lang][k]) ?? T.en[k] ?? "";
+const SR = 16000, WIN = 3 * SR, STEP_MS = 1500, AVG = 4, TARGET_S = 15;
+let lang = "en", mode = "a", ctx, stream, proc, analyser, buf = new Float32Array(0), timer = null, clock = null, raf = null;
+let running = false, busy = false, t0 = 0, recent = [], session = [], last = null, hasResult = false;
+
+const FRIENDLY = [
+  [/^f0_mean$/, "Average pitch"], [/^f0_std$/, "Pitch variation"], [/^f0_min$/, "Lowest pitch"], [/^f0_max$/, "Highest pitch"], [/^voiced_ratio$/, "Share of voiced sound"],
+  [/^jitter/, "Pitch instability (jitter)"], [/^shimmer/, "Loudness instability (shimmer)"], [/^hnr$/, "Voice clarity (HNR)"], [/^f([123])$/, "Vowel resonance F$1"],
+  [/^d?mfcc(\d+)_std$/, m => (m[0].startsWith("d") ? "Speed of spectral change #" : "Spectral variability #") + (+m[1] + 1)],
+  [/^centroid_std$/, "Brightness variability"], [/^bandwidth_std$/, "Spectral spread variability"], [/^rolloff_std$/, "High-frequency variability"],
+  [/^flatness_std$/, "Noisiness variability"], [/^zcr_std$/, "Breathiness variability"], [/^rms_std$/, "Loudness variability"], [/^contrast(\d)_std$/, "Spectral contrast variability"],
+];
+function friendly(n) {
+  for (const [re, out] of FRIENDLY) { const m = n.match(re); if (m) return typeof out === "function" ? out(m) : out.replace("$1", m[1] ?? ""); }
+  return n;
+}
+
+/* ---------- i18n ---------- */
+function render() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i]").forEach(el => el.textContent = L(el.dataset.i));
+  $("prompt").innerHTML = L(mode === "a" ? "pA" : "pB");
+  $("golbl").textContent = running ? L("stop") : L("start");
+  if (!hasResult) $("verdict").textContent = L("idle");
+  else paintVerdict(last.avg);
+  if (last) { paintModels(last.r); paintFeatures(last.r); }
+}
+$("lang").onchange = e => { lang = e.target.value; render(); };
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  mode = b.id === "tab_a" ? "a" : "b";
+  document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
+  $("prompt").innerHTML = L(mode === "a" ? "pA" : "pB");
+});
+
+/* ---------- audio ---------- */
+function resample(x, from) {
+  if (from === SR) return x;
+  const r = from / SR, n = Math.floor(x.length / r), o = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const p = i * r, j = Math.floor(p), f = p - j; o[i] = x[j] * (1 - f) + (x[j + 1] ?? x[j]) * f; }
+  return o;
+}
+async function start() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 } });
+  } catch (e) { setStatus(L("mic")); return; }
+  ctx = new AudioContext();
+  const src = ctx.createMediaStreamSource(stream);
+  analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = .2;
+  proc = ctx.createScriptProcessor(4096, 1, 1);
+  proc.onaudioprocess = ev => {
+    const x = resample(new Float32Array(ev.inputBuffer.getChannelData(0)), ctx.sampleRate);
+    let s = 0; for (const v of x) s += v * v;
+    $("lv").style.background = Math.sqrt(s / x.length) > 0.01 ? "var(--ok)" : "var(--line)";
+    const nb = new Float32Array(Math.min(buf.length + x.length, WIN));
+    const keep = nb.length - x.length;
+    if (keep > 0) nb.set(buf.subarray(buf.length - keep), 0);
+    nb.set(x.length > WIN ? x.subarray(x.length - WIN) : x, Math.max(keep, 0));
+    buf = nb;
+  };
+  src.connect(analyser); src.connect(proc); proc.connect(ctx.destination);
+  running = true; recent = []; session = []; buf = new Float32Array(0); last = null; hasResult = false;
+  $("summary").hidden = true; resetViews();
+  t0 = performance.now(); clock = setInterval(updateClock, 250); timer = setInterval(tick, STEP_MS);
+  $("go").classList.add("stop", "rec"); $("specCard").classList.add("live"); render(); setStatus(L("wait"));
+  drawSpec();
+}
+function stop() {
+  running = false; clearInterval(timer); clearInterval(clock); cancelAnimationFrame(raf);
+  proc && proc.disconnect(); stream && stream.getTracks().forEach(t => t.stop()); ctx && ctx.close();
+  $("go").classList.remove("stop", "rec"); $("specCard").classList.remove("live"); $("lv").style.background = "var(--line)"; setStatus(""); render(); summarise();
+}
+$("go").onclick = () => running ? stop() : start();
+function setStatus(t) { $("stxt").textContent = t; }
+function updateClock() {
+  const s = (performance.now() - t0) / 1000;
+  $("time").textContent = Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+  $("prog").style.width = Math.min(100, s / TARGET_S * 100) + "%";
+}
+
+/* ---------- inference ---------- */
+async function tick() {
+  if (busy || buf.length < WIN) return;
+  busy = true;
+  try {
+    const r = await (await fetch("/predict", { method:"POST", body:buf.slice().buffer })).json();
+    if (r.status === "no_voice") setStatus(L("novoice"));
+    else if (r.status === "ok") {
+      setStatus(L("listen"));
+      recent.push(r.score); if (recent.length > AVG) recent.shift();
+      const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+      session.push({ t:(performance.now() - t0) / 1000, score:r.score, models:r.models });
+      last = { r, avg }; hasResult = true;
+      paintScore(avg); paintModels(r); paintFeatures(r); paintChart();
+    }
+  } catch (e) { setStatus(String(e)); }
+  busy = false;
+}
+
+/* ---------- painting ---------- */
+function level(avg) { return avg < 0.35 ? ["low", "--ok"] : avg < 0.65 ? ["mid", "--mid"] : ["high", "--hi"]; }
+function paintVerdict(avg) { const [k] = level(avg); $("verdict").textContent = L(k); $("chip").className = "chip " + k; }
+let shown = 0;
+function tween(to) {
+  const from = shown, t = performance.now();
+  (function f(now) {
+    const k = Math.min(1, (now - t) / 600);
+    shown = from + (to - from) * (1 - Math.pow(1 - k, 3));
+    $("score").textContent = Math.round(shown) + "%";
+    if (k < 1) requestAnimationFrame(f);
+  })(t);
+}
+function paintScore(avg) {
+  const [, col] = level(avg), c = `var(${col})`;
+  tween(avg * 100);
+  $("arc").style.strokeDashoffset = 251.33 * (1 - avg); $("arc").style.stroke = c; $("arc").style.color = c;
+  $("knobg").style.opacity = 1; $("knobg").style.transform = `rotate(${avg * 180}deg)`; $("knobg").style.color = c;
+  paintVerdict(avg);
+}
+function paintModels(r) {
+  const used = new Set(r.used || []);
+  const rows = Object.entries(r.models).sort((a, b) => (used.has(b[0]) - used.has(a[0])));
+  $("models").innerHTML = rows.map(([n, p]) =>
+    `<div class="row ${used.has(n) ? "" : "cmp"}"><span class="nm">${n}<small>${used.has(n) ? L("in_score") : L("cmp")}</small></span>` +
+    `<span class="bar"><span style="width:${Math.round(p * 100)}%"></span></span><span class="v">${Math.round(p * 100)}%</span></div>`).join("");
+}
+function paintFeatures(r) {
+  $("why").innerHTML = r.features.map(f => {
+    const pd = f.towards === "PD";
+    return `<div class="feat"><span class="fn">${friendly(f.feature)}</span><span class="fv">${(+f.value).toPrecision(3)}</span>` +
+      `<span class="tag ${pd ? "pd" : "hc"}"><span class="mini"><span style="width:${Math.round(f.strength * 100)}%"></span></span>${L(pd ? "pd" : "hc")}</span></div>`;
+  }).join("");
+}
+function paintChart(all = false) {
+  const pts = all ? session : session.slice(-40), n = pts.length;
+  if (n < 2) return;
+  const xy = pts.map((p, i) => [i / (n - 1) * 300, 100 - p.score * 100]);
+  const d = xy.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  $("line").setAttribute("d", d);
+  $("area").setAttribute("d", d + " L300 100 L0 100 Z");
+}
+function resetViews() {
+  shown = 0; $("score").textContent = "–"; $("arc").style.strokeDashoffset = 251.33; $("arc").style.stroke = "var(--mute)";
+  $("knobg").style.opacity = 0; $("knobg").style.transform = "rotate(0deg)";
+  $("chip").className = "chip"; $("line").setAttribute("d", ""); $("area").setAttribute("d", "");
+  $("models").innerHTML = `<p style="color:var(--mute);margin:0">${L("empty")}</p>`; $("why").innerHTML = $("models").innerHTML;
+  $("prog").style.width = "0"; $("time").textContent = "0:00";
+  const c = $("spec").getContext("2d"); c.fillStyle = css("--viz"); c.fillRect(0, 0, 640, 140);
+}
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function drawSpec() {
+  const c = $("spec"), g = c.getContext("2d"), W = c.width, H = c.height;
+  const bins = new Uint8Array(analyser.frequencyBinCount), keep = Math.floor(8000 / (ctx.sampleRate / 2) * bins.length);
+  const bg = css("--viz");
+  const stops = [[12, 16, 40], [58, 44, 150], [150, 54, 170], [244, 110, 80], [255, 224, 130]];
+  const heat = v => { const x = Math.min(0.999, v) * (stops.length - 1), i = Math.floor(x), f = x - i;
+    return stops[i].map((c, k) => Math.round(c + (stops[i + 1][k] - c) * f)); };
+  (function frame() {
+    analyser.getByteFrequencyData(bins);
+    g.drawImage(c, -2, 0);
+    g.fillStyle = bg; g.fillRect(W - 2, 0, 2, H);
+    const h = H / keep;
+    for (let i = 0; i < keep; i++) {
+      const v = bins[i] / 255; if (v < .08) continue;
+      const [r, gg, b] = heat(v); g.fillStyle = `rgb(${r},${gg},${b})`;
+      g.fillRect(W - 2, H - (i + 1) * h, 2, Math.ceil(h));
+    }
+    raf = requestAnimationFrame(frame);
+  })();
+}
+
+/* ---------- uploaded audio ---------- */
+const MAX_FILE_S = 90;
+async function decodeTo16k(file) {
+  const tmp = new AudioContext();
+  let buf;
+  try { buf = await tmp.decodeAudioData(await file.arrayBuffer()); } finally { tmp.close(); }
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(Math.min(buf.duration, MAX_FILE_S) * SR)), SR);
+  const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+  return (await off.startRendering()).getChannelData(0).slice();
+}
+async function analyseFile(file) {
+  if (!file) return;
+  if (running) stop();
+  hasResult = false; last = null; session = []; $("summary").hidden = true; resetViews();
+  $("verdict").textContent = L("analysing") + "…";
+  const busyUI = on => { $("up").disabled = on; $("go").disabled = on; };
+  busyUI(true); setStatus(`${L("decoding")} ${file.name}…`);
+  try {
+    let pcm;
+    try { pcm = await decodeTo16k(file); } catch (e) { setStatus(L("decode_err")); return; }
+    setStatus(`${L("analysing")} ${file.name} (${Math.round(pcm.length / SR)} s)…`);
+    const r = await (await fetch("/analyze", { method:"POST", body:pcm.buffer })).json();
+    if (r.status === "too_short") { setStatus(L("tooshort")); return; }
+    if (r.status !== "ok") { setStatus(L("nospeech")); return; }
+    session = r.windows.map(w => ({ t:w.t, score:w.score, models:w.models }));
+    last = { r, avg:r.score }; hasResult = true;
+    paintScore(r.score); paintModels(r); paintFeatures(r); paintChart(true);
+    $("prog").style.width = "100%"; $("time").textContent = Math.floor(r.duration / 60) + ":" + String(Math.floor(r.duration % 60)).padStart(2, "0");
+    setStatus(file.name); summarise(r.duration);
+  } catch (e) { setStatus(String(e)); }
+  finally { busyUI(false); render(); }
+}
+$("up").onclick = () => $("file").click();
+$("file").onchange = e => { analyseFile(e.target.files[0]); e.target.value = ""; };
+const dropCard = $("go").closest(".card");
+["dragenter", "dragover"].forEach(ev => dropCard.addEventListener(ev, e => { e.preventDefault(); dropCard.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev => dropCard.addEventListener(ev, e => { e.preventDefault(); dropCard.classList.remove("drag"); }));
+dropCard.addEventListener("drop", e => analyseFile(e.dataTransfer.files[0]));
+
+/* ---------- summary / report ---------- */
+function summarise(dur = (performance.now() - t0) / 1000) {
+  if (!session.length) return;
+  const sc = session.map(s => s.score), avg = sc.reduce((a, b) => a + b, 0) / sc.length;
+  $("summary").hidden = false;
+  $("s_avg").textContent = Math.round(avg * 100) + "%"; $("s_win").textContent = sc.length; $("s_dur").textContent = Math.round(dur) + " s";
+  $("s_text").textContent = sc.length < 4 ? L("sum_few") : L(avg < .35 ? "sum_low" : avg < .65 ? "sum_mid" : "sum_high");
+  $("summary").scrollIntoView({ behavior:"smooth", block:"nearest" });
+}
+$("dl").onclick = () => {
+  const sc = session.map(s => s.score), avg = sc.reduce((a, b) => a + b, 0) / (sc.length || 1);
+  const names = Object.keys(session[0]?.models || {}), per = {};
+  names.forEach(n => per[n] = +(session.reduce((a, s) => a + s.models[n], 0) / session.length).toFixed(3));
+  const rep = { generated:new Date().toISOString(), windows:sc.length, average_score:+avg.toFixed(3), per_model_average:per,
+    window_scores:session.map(s => ({ t_seconds:+s.t.toFixed(1), score:+s.score.toFixed(3) })),
+    note:"Screening aid only, not a medical diagnosis." };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(rep, null, 2)], { type:"application/json" }));
+  a.download = "voice-screen-report.json"; a.click();
+};
+$("pr").onclick = () => window.print();
+
+render(); resetViews();
+</script>
+</body>
+</html>

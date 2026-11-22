@@ -1,0 +1,23 @@
+datasets/
+data_processed/
+.venv_gpu/
+server.log
+
+# --- added for publishing ---
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.zip
+.claude/
+.pytest_cache/
+.next/
+dist/
+build/
+*.log
+.DS_Store
